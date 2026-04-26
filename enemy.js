@@ -11,6 +11,8 @@ class Enemy {
         this.isDead = false;
         this.health = 1;
         this.attackCooldown = 0;
+        this.animator = new Animator();
+        this.currentAnimName = null;
 
         // 根据类型设置属性
         this.setupType();
@@ -50,43 +52,45 @@ class Enemy {
 
     async loadAssets() {
         const mobPath = 'Legacy-Fantasy - High Forest 2.3/Mob';
+        const anim = this.animator;
 
         if (this.type === 'snail') {
-            await animator.loadAnimation('snail_walk', `${mobPath}/Snail/walk-Sheet.png`, 8, 32, 24);
-            await animator.loadAnimation('snail_dead', `${mobPath}/Snail/Dead-Sheet.png`, 6, 32, 24);
-            await animator.loadAnimation('snail_hide', `${mobPath}/Snail/Hide-Sheet.png`, 3, 32, 24);
+            await anim.loadAnimation('snail_walk', `${mobPath}/Snail/walk-Sheet.png`, 8, 32, 24);
+            await anim.loadAnimation('snail_dead', `${mobPath}/Snail/Dead-Sheet.png`, 6, 32, 24);
+            await anim.loadAnimation('snail_hide', `${mobPath}/Snail/Hide-Sheet.png`, 3, 32, 24);
         } else if (this.type === 'boar') {
-            await animator.loadAnimation('boar_idle', `${mobPath}/Boar/Idle/Idle-Sheet.png`, 4, 40, 28, 0, 4);
-            await animator.loadAnimation('boar_run', `${mobPath}/Boar/Run/Run-Sheet.png`, 6, 40, 28, 0, 4);
+            await anim.loadAnimation('boar_idle', `${mobPath}/Boar/Idle/Idle-Sheet.png`, 4, 40, 28, 0, 4);
+            await anim.loadAnimation('boar_run', `${mobPath}/Boar/Run/Run-Sheet.png`, 6, 40, 28, 0, 4);
         } else if (this.type === 'bee') {
-            await animator.loadAnimation('bee_fly', `${mobPath}/Small Bee/Fly/Fly-Sheet.png`, 4, 24, 20);
+            await anim.loadAnimation('bee_fly', `${mobPath}/Small Bee/Fly/Fly-Sheet.png`, 4, 24, 20);
         }
     }
 
     update(deltaTime, player) {
-        if (this.isDead) return;
-
         // 攻击冷却
         if (this.attackCooldown > 0) {
             this.attackCooldown -= deltaTime;
         }
 
         // 根据类型更新行为
-        switch (this.type) {
-            case 'snail':
-                this.updateSnail(deltaTime, player);
-                break;
-            case 'boar':
-                this.updateBoar(deltaTime, player);
-                break;
-            case 'bee':
-                this.updateBee(deltaTime, player);
-                break;
+        if (!this.isDead) {
+            switch (this.type) {
+                case 'snail':
+                    this.updateSnail(deltaTime, player);
+                    break;
+                case 'boar':
+                    this.updateBoar(deltaTime, player);
+                    break;
+                case 'bee':
+                    this.updateBee(deltaTime, player);
+                    break;
+            }
+
+            // 更新动画
+            this.updateAnimation();
         }
 
-        // 更新动画
-        this.updateAnimation();
-        animator.update(deltaTime);
+        this.animator.update(deltaTime);
     }
 
     updateSnail(deltaTime, player) {
@@ -95,6 +99,10 @@ class Enemy {
         if (this.isHiding) {
             this.hideTimer -= deltaTime;
             if (this.hideTimer <= 0) {
+                this.isHiding = false;
+            }
+            // 如果死亡，立即退出隐藏状态
+            if (this.isDead) {
                 this.isHiding = false;
             }
             return;
@@ -165,18 +173,27 @@ class Enemy {
     }
 
     updateAnimation() {
-        const animName = `${this.type}_${this.isDead ? 'dead' : this.getCurrentAnimState()}`;
+        const anim = this.animator;
+        let targetAnim;
 
         if (this.type === 'snail' && this.isHiding && !this.isDead) {
-            animator.play('snail_hide', 6, false);
+            targetAnim = 'snail_hide';
         } else if (this.type === 'boar' && !this.isDead) {
-            const anim = Math.abs(this.game.player.x - this.x) < 300 ? 'boar_run' : 'boar_idle';
-            animator.play(anim, this.type === 'boar' ? 8 : 6, true);
+            targetAnim = Math.abs(this.game.player.x - this.x) < 300 ? 'boar_run' : 'boar_idle';
         } else if (!this.isDead) {
-            const fps = this.type === 'snail' ? 8 : (this.type === 'bee' ? 10 : 8);
-            animator.play(animName, fps, true);
+            targetAnim = `${this.type}_${this.getCurrentAnimState()}`;
         } else {
-            animator.play(animName, 6, false);
+            targetAnim = `${this.type}_dead`;
+        }
+
+        // 只在动画改变时播放新动画，避免帧重置闪烁
+        if (this.currentAnimName !== targetAnim) {
+            this.currentAnimName = targetAnim;
+            const fps = targetAnim.includes('dead') ? 6
+                : (targetAnim === 'snail_hide' ? 6
+                : (this.type === 'snail' ? 8 : (this.type === 'bee' ? 10 : 8)));
+            const loop = !targetAnim.includes('dead') && targetAnim !== 'snail_hide';
+            anim.play(targetAnim, fps, loop);
         }
     }
 
@@ -186,9 +203,9 @@ class Enemy {
     }
 
     draw(ctx) {
-        if (this.isDead && animator.isAnimationComplete()) return;
+        if (this.isDead && this.animator.isAnimationComplete()) return;
 
-        const anim = animator.getCurrentFrame();
+        const anim = this.animator.getCurrentFrame();
         if (!anim) return;
 
         ctx.save();
@@ -231,8 +248,8 @@ class Enemy {
 
         // 播放死亡动画
         const deathAnim = `${this.type}_dead`;
-        if (animator.animations[deathAnim]) {
-            animator.play(deathAnim, 6, false);
+        if (this.animator.animations[deathAnim]) {
+            this.animator.play(deathAnim, 6, false);
         }
 
         // 动画结束后移除敌人

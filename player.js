@@ -51,28 +51,33 @@ class Player {
         // 动画帧尺寸
         this.frameWidth = 32;
         this.frameHeight = 32;
+
+        // 独立的动画管理器
+        this.animator = new Animator();
+        this.currentAnimName = null;
     }
 
     async loadAssets() {
         const assetPath = 'Legacy-Fantasy - High Forest 2.3/Character';
+        const anim = this.animator;
 
         try {
             console.log('Loading player assets...');
             // 加载所有动画（8 帧待机，8 帧跑步，9 帧跳跃，8 帧攻击，9 帧死亡）
-            await animator.loadAnimation('idle', `${assetPath}/Idle/Idle-Sheet.png`, 8, 32, 32);
+            await anim.loadAnimation('idle', `${assetPath}/Idle/Idle-Sheet.png`, 8, 32, 32);
             console.log('Idle loaded');
-            await animator.loadAnimation('run', `${assetPath}/Run/Run-Sheet.png`, 8, 32, 32);
+            await anim.loadAnimation('run', `${assetPath}/Run/Run-Sheet.png`, 8, 32, 32);
             console.log('Run loaded');
             // 注意：原素材文件夹名是 Jumlp-All（拼写错误）
-            await animator.loadAnimation('jump', `${assetPath}/Jumlp-All/Jump-All-Sheet.png`, 9, 32, 32);
+            await anim.loadAnimation('jump', `${assetPath}/Jumlp-All/Jump-All-Sheet.png`, 9, 32, 32);
             console.log('Jump loaded');
-            await animator.loadAnimation('attack', `${assetPath}/Attack-01/Attack-01-Sheet.png`, 8, 32, 32);
+            await anim.loadAnimation('attack', `${assetPath}/Attack-01/Attack-01-Sheet.png`, 8, 32, 32);
             console.log('Attack loaded');
-            await animator.loadAnimation('dead', `${assetPath}/Dead/Dead-Sheet.png`, 9, 32, 32);
+            await anim.loadAnimation('dead', `${assetPath}/Dead/Dead-Sheet.png`, 9, 32, 32);
             console.log('Dead loaded');
 
             // 默认播放待机动画
-            animator.play('idle', 8, true);
+            anim.play('idle', 8, true);
             console.log('Player assets loaded successfully');
         } catch (e) {
             console.error('Failed to load player assets:', e);
@@ -81,7 +86,7 @@ class Player {
 
     update(deltaTime) {
         if (this.isDead) {
-            animator.update(deltaTime);
+            this.animator.update(deltaTime);
             return;
         }
 
@@ -109,7 +114,7 @@ class Player {
 
         // 更新动画
         this.updateAnimation();
-        animator.update(deltaTime);
+        this.animator.update(deltaTime);
     }
 
     handleInput() {
@@ -181,19 +186,29 @@ class Player {
     }
 
     updateAnimation() {
+        let targetAnim;
+
         if (this.isDead) {
-            animator.play('dead', 8, false);
-            return;
+            targetAnim = 'dead';
+        } else if (this.isAttacking) {
+            targetAnim = 'attack';
+        } else if (!this.grounded) {
+            targetAnim = 'jump';
+        } else if (this.vx !== 0) {
+            targetAnim = 'run';
+        } else {
+            targetAnim = 'idle';
         }
 
-        if (this.isAttacking) {
-            animator.play('attack', 25, false);
-        } else if (!this.grounded) {
-            animator.play('jump', 12, false);
-        } else if (this.vx !== 0) {
-            animator.play('run', 12, true);
-        } else {
-            animator.play('idle', 8, true);
+        // 只在动画改变时播放新动画，避免帧重置闪烁
+        if (this.currentAnimName !== targetAnim) {
+            this.currentAnimName = targetAnim;
+            const fps = targetAnim === 'attack' ? 25
+                : (targetAnim === 'jump' ? 12
+                : (targetAnim === 'run' ? 12
+                : (targetAnim === 'dead' ? 8 : 8)));
+            const loop = targetAnim === 'idle' || targetAnim === 'run';
+            this.animator.play(targetAnim, fps, loop);
         }
     }
 
@@ -203,11 +218,11 @@ class Player {
             return;
         }
 
-        const frame = animator.getCurrentFrame();
+        const frame = this.animator.getCurrentFrame();
 
         // 调试日志
         if (!frame) {
-            console.log('No frame to draw, currentAnimation:', animator.currentAnimation);
+            console.log('No frame to draw, currentAnimation:', this.animator.currentAnimation);
             return;
         }
 
@@ -251,7 +266,7 @@ class Player {
 
     die() {
         this.isDead = true;
-        animator.play('dead', 8, false);
+        this.animator.play('dead', 8, false);
 
         setTimeout(() => {
             this.game.gameOver();
