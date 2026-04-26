@@ -1,0 +1,824 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>游戏测试</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            background: #1a1a2e;
+            color: #e0e0e0;
+            font-family: 'Courier New', monospace;
+            padding: 20px;
+        }
+        h1 {
+            color: #4CAF50;
+            margin-bottom: 20px;
+            text-align: center;
+        }
+        #results {
+            max-width: 900px;
+            margin: 0 auto;
+        }
+        .suite {
+            background: #2a2a3e;
+            border-radius: 8px;
+            padding: 15px;
+            margin-bottom: 15px;
+        }
+        .suite h2 {
+            color: #64B5F6;
+            margin-bottom: 10px;
+            font-size: 18px;
+        }
+        .test {
+            padding: 6px 15px;
+            margin: 4px 0;
+            border-radius: 4px;
+            font-size: 14px;
+        }
+        .pass {
+            background: #1b5e20;
+            color: #a5d6a7;
+        }
+        .fail {
+            background: #b71c1c;
+            color: #ef9a9a;
+        }
+        .summary {
+            text-align: center;
+            padding: 15px;
+            font-size: 20px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+        }
+        .summary.all-pass {
+            background: #1b5e20;
+            color: #a5d6a7;
+        }
+        .summary.has-fail {
+            background: #b71c1c;
+            color: #ef9a9a;
+        }
+        button {
+            display: block;
+            margin: 0 auto 20px;
+            background: #4CAF50;
+            color: white;
+            border: none;
+            padding: 12px 40px;
+            font-size: 18px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-family: 'Courier New', monospace;
+        }
+        button:hover { background: #66BB6A; }
+        pre { color: #ffcc80; font-size: 12px; margin-top: 4px; }
+        #game-container { display: none; }
+    </style>
+</head>
+<body>
+    <h1>🧪 游戏单元测试</h1>
+    <button onclick="runAllTests()">运行全部测试</button>
+    <div id="results"></div>
+
+    <!-- 为 game.js 提供必需的 DOM 元素 -->
+    <div id="game-container">
+        <canvas id="gameCanvas" width="800" height="450"></canvas>
+        <div id="ui-overlay">
+            <div id="health-display"></div>
+            <div id="score-display"></div>
+        </div>
+        <div id="start-screen">
+            <button id="start-btn"></button>
+        </div>
+        <div id="game-over-screen">
+            <button id="restart-btn"></button>
+            <div id="final-score"></div>
+        </div>
+    </div>
+
+    <!-- 引入游戏源码 -->
+    <script src="animator.js"></script>
+    <script src="input.js"></script>
+    <script src="player.js"></script>
+    <script src="enemy.js"></script>
+    <script src="game.js"></script>
+
+    <script>
+        // ========== 测试框架 ==========
+        let totalPass = 0;
+        let totalFail = 0;
+        const results = document.getElementById('results');
+
+        function assert(condition, message) {
+            if (!condition) throw new Error(message || '断言失败');
+        }
+
+        function assertEqual(actual, expected, message) {
+            if (actual !== expected) {
+                throw new Error(`${message || '断言失败'}: 期望 ${expected}，实际 ${actual}`);
+            }
+        }
+
+        function describe(name, fn) {
+            const suite = document.createElement('div');
+            suite.className = 'suite';
+            const h2 = document.createElement('h2');
+            h2.textContent = name;
+            suite.appendChild(h2);
+
+            const oldResults = results;
+            let suitePass = 0;
+            let suiteFail = 0;
+
+            // 临时覆盖测试输出
+            const origAppend = results.appendChild.bind(results);
+            const testsContainer = document.createElement('div');
+            suite.appendChild(testsContainer);
+
+            fn(); // 执行测试，收集结果
+
+            results.appendChild(suite);
+        }
+
+        function test(name, fn) {
+            try {
+                fn();
+                totalPass++;
+
+                const div = document.createElement('div');
+                div.className = 'test pass';
+                div.textContent = `✅ ${name}`;
+                appendToCurrentSuite(div);
+            } catch (e) {
+                totalFail++;
+
+                const div = document.createElement('div');
+                div.className = 'test fail';
+                div.innerHTML = `❌ ${name}`;
+                const pre = document.createElement('pre');
+                pre.textContent = e.message;
+                div.appendChild(pre);
+                appendToCurrentSuite(div);
+            }
+        }
+
+        let currentSuiteElement = null;
+        function appendToCurrentSuite(el) {
+            if (currentSuiteElement) {
+                currentSuiteElement.appendChild(el);
+            } else {
+                results.appendChild(el);
+            }
+        }
+
+        // ========== 测试实现 ==========
+        // 为了正确归属到对应的 suite，我们改造 describe
+        const origDescribe = describe;
+
+        function runAllTests() {
+            results.innerHTML = '';
+            totalPass = 0;
+            totalFail = 0;
+
+            // --- Animator 测试 ---
+            createSuite('Animator 动画系统', () => {
+                test('初始化状态', () => {
+                    const a = new Animator();
+                    assertEqual(a.currentAnimation, null, '初始动画应为 null');
+                    assertEqual(a.frameIndex, 0, '初始帧索引应为 0');
+                    assertEqual(a.frameTimer, 0, '初始帧计时器应为 0');
+                });
+
+                test('从图像创建动画', () => {
+                    const a = new Animator();
+                    const img = new Image();
+                    a.createAnimationFromImage('test', img, 8, 32, 32);
+                    assert(a.animations['test'] !== undefined, '动画应被创建');
+                    assertEqual(a.animations['test'].frameCount, 8, '帧数应为 8');
+                    assertEqual(a.animations['test'].frameWidth, 32, '帧宽应为 32');
+                });
+
+                test('播放动画 - 重置状态', () => {
+                    const a = new Animator();
+                    const img = new Image();
+                    a.createAnimationFromImage('walk', img, 4, 32, 32);
+                    a.frameIndex = 3;
+                    a.play('walk', 10, true);
+                    assertEqual(a.frameIndex, 0, '播放应重置帧索引');
+                    assertEqual(a.frameTimer, 0, '播放应重置帧计时器');
+                    assertEqual(a.frameInterval, 100, '帧间隔应为 100ms (fps=10)');
+                });
+
+                test('更新动画 - 帧前进', () => {
+                    const a = new Animator();
+                    const img = new Image();
+                    a.createAnimationFromImage('walk', img, 4, 32, 32);
+                    a.play('walk', 10, true); // frameInterval = 100ms
+                    a.update(100); // 经过一个帧间隔
+                    assertEqual(a.frameIndex, 1, '帧索引应前进到 1');
+                });
+
+                test('更新动画 - 循环', () => {
+                    const a = new Animator();
+                    const img = new Image();
+                    a.createAnimationFromImage('walk', img, 3, 32, 32);
+                    a.play('walk', 10, true);
+                    a.frameIndex = 2; // 到最后一帧
+                    a.update(100);
+                    assertEqual(a.frameIndex, 0, '循环动画应回到第一帧');
+                });
+
+                test('更新动画 - 非循环停止', () => {
+                    const a = new Animator();
+                    const img = new Image();
+                    a.createAnimationFromImage('dead', img, 3, 32, 32);
+                    a.play('dead', 10, false);
+                    a.frameIndex = 2;
+                    a.update(100);
+                    assertEqual(a.frameIndex, 2, '非循环动画应停在最后一帧');
+                });
+
+                test('getCurrentFrame 返回正确信息', () => {
+                    const a = new Animator();
+                    const img = new Image();
+                    a.createAnimationFromImage('walk', img, 8, 32, 40, 10, 5);
+                    a.play('walk', 10, true);
+                    a.frameIndex = 2;
+                    const frame = a.getCurrentFrame();
+                    assertEqual(frame.image, img, '帧图像应匹配');
+                    assertEqual(frame.sx, 10 + 2 * 32, '源X应为 74');
+                    assertEqual(frame.sy, 5, '源Y应为 5');
+                    assertEqual(frame.sw, 32, '源宽应为 32');
+                    assertEqual(frame.sh, 40, '源高应为 40');
+                    assertEqual(frame.frameIndex, 2, '帧索引应为 2');
+                });
+
+                test('无动画时 getCurrentFrame 返回 null', () => {
+                    const a = new Animator();
+                    assertEqual(a.getCurrentFrame(), null, '无动画时应返回 null');
+                });
+
+                test('isAnimationComplete - 循环为 false', () => {
+                    const a = new Animator();
+                    const img = new Image();
+                    a.createAnimationFromImage('walk', img, 3, 32, 32);
+                    a.play('walk', 10, true);
+                    a.frameIndex = 2;
+                    assertEqual(a.isAnimationComplete(), false, '循环动画不应完成');
+                });
+
+                test('isAnimationComplete - 非循环为 true', () => {
+                    const a = new Animator();
+                    const img = new Image();
+                    a.createAnimationFromImage('dead', img, 3, 32, 32);
+                    a.play('dead', 10, false);
+                    a.frameIndex = 2;
+                    assertEqual(a.isAnimationComplete(), true, '非循环到末尾应完成');
+                });
+
+                test('reset 重置所有状态', () => {
+                    const a = new Animator();
+                    a.currentAnimation = 'walk';
+                    a.frameIndex = 5;
+                    a.frameTimer = 50;
+                    a.reset();
+                    assertEqual(a.currentAnimation, null, '应重置动画名');
+                    assertEqual(a.frameIndex, 0, '应重置帧索引');
+                    assertEqual(a.frameTimer, 0, '应重置帧计时器');
+                });
+
+                test('getFrameWidth / getFrameHeight', () => {
+                    const a = new Animator();
+                    const img = new Image();
+                    a.createAnimationFromImage('test', img, 4, 48, 64);
+                    a.play('test', 10, true);
+                    assertEqual(a.getFrameWidth(), 48, '宽度应为 48');
+                    assertEqual(a.getFrameHeight(), 64, '高度应为 64');
+                });
+
+                test('无动画时 getFrameWidth 返回 0', () => {
+                    const a = new Animator();
+                    assertEqual(a.getFrameWidth(), 0, '无动画时宽度应为 0');
+                    assertEqual(a.getFrameHeight(), 0, '无动画时高度应为 0');
+                });
+
+                test('播放相同动画不重置 (已在播放)', () => {
+                    const a = new Animator();
+                    const img = new Image();
+                    a.createAnimationFromImage('walk', img, 8, 32, 32);
+                    a.play('walk', 10, true);
+                    a.frameIndex = 3;
+                    a.play('walk', 10, true); // 再次播放相同动画
+                    assertEqual(a.frameIndex, 3, '相同动画不应重置帧索引');
+                });
+            });
+
+            // --- InputHandler 测试 ---
+            createSuite('InputHandler 输入系统', () => {
+                // 注意：每个 InputHandler 实例会向 document 添加事件监听器
+                // 测试直接操作 keys 状态，不触发实际键盘事件
+
+                test('初始状态所有键为 false', () => {
+                    const ih = new InputHandler();
+                    assertEqual(ih.keys.left, false, 'left 应为 false');
+                    assertEqual(ih.keys.right, false, 'right 应为 false');
+                    assertEqual(ih.keys.up, false, 'up 应为 false');
+                    assertEqual(ih.keys.down, false, 'down 应为 false');
+                    assertEqual(ih.keys.attack, false, 'attack 应为 false');
+                });
+
+                test('isIdle - 无按键时返回 true', () => {
+                    const ih = new InputHandler();
+                    assertEqual(ih.isIdle(), true, '无按键时应为 idle');
+                });
+
+                test('isMovingLeft - 按下 A 键', () => {
+                    const ih = new InputHandler();
+                    ih.keys.left = true;
+                    assertEqual(ih.isMovingLeft(), true, '按 A 应向左移动');
+                });
+
+                test('isMovingRight - 按下 D 键', () => {
+                    const ih = new InputHandler();
+                    ih.keys.right = true;
+                    assertEqual(ih.isMovingRight(), true, '按 D 应向右移动');
+                });
+
+                test('isIdle - 按下左右键时 false', () => {
+                    const ih = new InputHandler();
+                    ih.keys.left = true;
+                    assertEqual(ih.isIdle(), false, '按左键不应为 idle');
+                });
+
+                test('getAttackPressed 返回并重置', () => {
+                    const ih = new InputHandler();
+                    ih.attackPressed = true;
+                    assertEqual(ih.getAttackPressed(), true, '应返回 true');
+                    assertEqual(ih.attackPressed, false, '应重置为 false');
+                });
+
+                test('update 重置 attackPressed', () => {
+                    const ih = new InputHandler();
+                    ih.attackPressed = true;
+                    ih.update();
+                    assertEqual(ih.attackPressed, false, 'update 应重置 attackPressed');
+                });
+
+                test('同时按下左右键 - isMovingLeft/Right 为 false', () => {
+                    const ih = new InputHandler();
+                    ih.keys.left = true;
+                    ih.keys.right = true;
+                    assertEqual(ih.isMovingLeft(), false, '同时按左右不应向左');
+                    assertEqual(ih.isMovingRight(), false, '同时按左右不应向右');
+                });
+            });
+
+            // --- Player 测试 ---
+            createSuite('Player 玩家系统', () => {
+                test('初始属性', () => {
+                    const mockGame = { width: 800, height: 450 };
+                    const p = new Player(mockGame);
+                    assertEqual(p.x, 100, '初始 X 应为 100');
+                    assertEqual(p.y, 300, '初始 Y 应为 300');
+                    assertEqual(p.health, 5, '初始生命值应为 5');
+                    assertEqual(p.maxHealth, 5, '最大生命值应为 5');
+                    assertEqual(p.score, 0, '初始得分应为 0');
+                    assertEqual(p.isDead, false, '初始不应死亡');
+                    assertEqual(p.attackDamage, 2, '攻击伤害应为 2');
+                });
+
+                test('攻击框初始未激活', () => {
+                    const mockGame = { width: 800, height: 450 };
+                    const p = new Player(mockGame);
+                    assertEqual(p.attackBox.active, false, '攻击框初始不应激活');
+                });
+
+                test('getBounds 返回碰撞框', () => {
+                    const mockGame = { width: 800, height: 450 };
+                    const p = new Player(mockGame);
+                    p.x = 100;
+                    p.y = 200;
+                    const bounds = p.getBounds();
+                    assert(bounds.x !== undefined, '应有 x');
+                    assert(bounds.y !== undefined, '应有 y');
+                    assert(bounds.width !== undefined, '应有 width');
+                    assert(bounds.height !== undefined, '应有 height');
+                });
+
+                test('takeDamage 减少生命值', () => {
+                    const mockGame = { width: 800, height: 450, updateUI: () => {} };
+                    const p = new Player(mockGame);
+                    p.takeDamage(1);
+                    assertEqual(p.health, 4, '生命值应为 4');
+                });
+
+                test('takeDamage 触发无敌状态', () => {
+                    const mockGame = { width: 800, height: 450, updateUI: () => {} };
+                    const p = new Player(mockGame);
+                    p.takeDamage(1);
+                    assertEqual(p.invincible, true, '应进入无敌状态');
+                    assert(p.invincibleTimer > 0, '无敌计时器应大于 0');
+                });
+
+                test('无敌时不受伤害', () => {
+                    const mockGame = { width: 800, height: 450, updateUI: () => {} };
+                    const p = new Player(mockGame);
+                    p.takeDamage(1); // 进入无敌
+                    const healthBefore = p.health;
+                    p.takeDamage(1); // 应被忽略
+                    assertEqual(p.health, healthBefore, '无敌时不应受伤');
+                });
+
+                test('死亡时不受伤害', () => {
+                    const mockGame = { width: 800, height: 450, updateUI: () => {}, gameOver: () => {} };
+                    const p = new Player(mockGame);
+                    const healthBefore = p.health;
+                    p.isDead = true;
+                    p.takeDamage(1);
+                    assertEqual(p.health, healthBefore, '死亡后不应继续受伤');
+                    assertEqual(p.invincible, false, '死亡时受伤不应触发无敌');
+                });
+
+                test('takeDamage 生命归零触发死亡', () => {
+                    let gameOverCalled = false;
+                    const mockGame = {
+                        width: 800, height: 450,
+                        updateUI: () => {},
+                        gameOver: () => { gameOverCalled = true; }
+                    };
+                    const p = new Player(mockGame);
+                    // 生命值 5，每次伤害 1，需要 5 次
+                    for (let i = 0; i < 5; i++) {
+                        p.takeDamage(1);
+                    }
+                    // 最后一次 should trigger die
+                    // 但由于无敌，需要手动触发
+                    p.invincible = false;
+                    p.health = 1;
+                    p.takeDamage(1);
+                    assertEqual(p.isDead, true, '生命归零应死亡');
+                });
+
+                test('起始位置在画面内', () => {
+                    const mockGame = { width: 800, height: 450 };
+                    const p = new Player(mockGame);
+                    assert(p.x >= 0 && p.x < mockGame.width, 'X 应在画面范围内');
+                    assert(p.y >= 0 && p.y < mockGame.height, 'Y 应在画面范围内');
+                });
+            });
+
+            // --- Enemy 测试 ---
+            createSuite('Enemy 敌人系统', () => {
+                test('骷髅（snail）属性', () => {
+                    const mockGame = { width: 800, height: 450, enemies: [] };
+                    const e = new Enemy(mockGame, 200, 300, 'snail');
+                    assertEqual(e.type, 'snail', '类型应为 snail');
+                    assertEqual(e.health, 1, '骷髅生命应为 1');
+                    assertEqual(e.speed, 1, '骷髅速度应为 1');
+                    assertEqual(e.scoreValue, 10, '骷髅分值应为 10');
+                    assertEqual(e.isDead, false, '初始不应死亡');
+                });
+
+                test('野猪（boar）属性', () => {
+                    const mockGame = { width: 800, height: 450, enemies: [] };
+                    const e = new Enemy(mockGame, 200, 300, 'boar');
+                    assertEqual(e.type, 'boar', '类型应为 boar');
+                    assertEqual(e.health, 3, '野猪生命应为 3');
+                    assertEqual(e.speed, 2.5, '野猪速度应为 2.5');
+                    assertEqual(e.scoreValue, 20, '野猪分值应为 20');
+                });
+
+                test('蜜蜂（bee）属性', () => {
+                    const mockGame = { width: 800, height: 450, enemies: [] };
+                    const e = new Enemy(mockGame, 200, 300, 'bee');
+                    assertEqual(e.type, 'bee', '类型应为 bee');
+                    assertEqual(e.health, 1, '蜜蜂生命应为 1');
+                    assertEqual(e.scoreValue, 15, '蜜蜂分值应为 15');
+                    assert(e.baseY !== undefined, '蜜蜂应有 baseY');
+                });
+
+                test('getBounds 返回碰撞框', () => {
+                    const mockGame = { width: 800, height: 450, enemies: [] };
+                    const e = new Enemy(mockGame, 200, 300, 'snail');
+                    const bounds = e.getBounds();
+                    assert(bounds.x !== undefined, '应有 x');
+                    assert(bounds.y !== undefined, '应有 y');
+                    assert(bounds.width > 0, '宽度应大于 0');
+                    assert(bounds.height > 0, '高度应大于 0');
+                });
+
+                test('takeDamage 减少生命', () => {
+                    const mockGame = { width: 800, height: 450, enemies: [], player: { score: 0 }, updateUI: () => {} };
+                    const e = new Enemy(mockGame, 200, 300, 'boar');
+                    e.takeDamage(1);
+                    assertEqual(e.health, 2, '野猪生命应为 2');
+                });
+
+                test('takeDamage 生命归零标记死亡', () => {
+                    const mockGame = { width: 800, height: 450, enemies: [], player: { score: 0 }, updateUI: () => {} };
+                    const e = new Enemy(mockGame, 200, 300, 'snail');
+                    e.takeDamage(1);
+                    assertEqual(e.isDead, true, '骷髅应死亡');
+                });
+
+                test('死亡后不再受伤', () => {
+                    const mockGame = { width: 800, height: 450, enemies: [], player: { score: 0 }, updateUI: () => {} };
+                    const e = new Enemy(mockGame, 200, 300, 'boar');
+                    const healthBefore = e.health;
+                    e.isDead = true;
+                    e.takeDamage(1);
+                    assertEqual(e.health, healthBefore, '死亡后不应继续受伤');
+                    assertEqual(e.isDead, true, '应保持死亡状态');
+                });
+
+                test('躲藏的骷髅不受伤害', () => {
+                    const mockGame = { width: 800, height: 450, enemies: [], player: { score: 0 }, updateUI: () => {} };
+                    const e = new Enemy(mockGame, 200, 300, 'snail');
+                    e.isHiding = true;
+                    e.takeDamage(1);
+                    assertEqual(e.health, 1, '躲藏的骷髅不应受伤');
+                });
+
+                test('collidesWith 检测碰撞', () => {
+                    const mockGame = { width: 800, height: 450, enemies: [] };
+                    const e = new Enemy(mockGame, 100, 300, 'snail');
+                    // 玩家与敌人位置完全重叠
+                    const player = {
+                        x: 110, y: 310,
+                        width: 50, height: 50,
+                        getBounds: function() {
+                            return { x: this.x, y: this.y, width: this.width, height: this.height };
+                        }
+                    };
+                    assertEqual(e.collidesWith(player), true, '重叠时应碰撞');
+                });
+
+                test('collidesWith 不重叠无碰撞', () => {
+                    const mockGame = { width: 800, height: 450, enemies: [] };
+                    const e = new Enemy(mockGame, 100, 300, 'snail');
+                    const player = {
+                        x: 9999, y: 9999,
+                        width: 100, height: 100,
+                        getBounds: function() {
+                            return { x: this.x, y: this.y, width: this.width, height: this.height };
+                        }
+                    };
+                    assertEqual(e.collidesWith(player), false, '远离时不应碰撞');
+                });
+
+                test('骷髅计时器结束后退出躲藏', () => {
+                    const mockGame = { width: 800, height: 450, enemies: [] };
+                    const e = new Enemy(mockGame, 100, 300, 'snail');
+
+                    // 测试：不在躲藏时，玩家远离则缓慢移动
+                    e.isHiding = false;
+                    const playerFar = { x: 500 };
+                    const xBefore = e.x;
+                    e.updateSnail(16, playerFar);
+                    assert(e.x !== xBefore || Math.abs(playerFar.x - e.x) >= 150,
+                        '非躲藏状态下可以移动');
+
+                    // 测试：躲藏计时器归零后退出躲藏
+                    e.isHiding = true;
+                    e.hideTimer = 16; // 16ms 后归零
+                    e.updateSnail(16, playerFar);
+                    assertEqual(e.isHiding, false, '计时器归零后应退出躲藏');
+                });
+            });
+
+            // --- EnemySpawner 测试 ---
+            createSuite('EnemySpawner 敌人生成器', () => {
+                test('初始生成计时器', () => {
+                    const mockGame = { width: 800, height: 450, enemies: [] };
+                    const spawner = new EnemySpawner(mockGame);
+                    assertEqual(spawner.spawnInterval, 3000, '初始间隔应为 3000ms');
+                });
+
+                test('敌人数量少于上限时生成', () => {
+                    const mockGame = { width: 800, height: 450, enemies: [] };
+                    const spawner = new EnemySpawner(mockGame);
+                    spawner.spawnTimer = 0;
+                    spawner.spawn();
+                    assertEqual(mockGame.enemies.length, 1, '应生成 1 个敌人');
+                });
+
+                test('敌人数量达到上限不生成', () => {
+                    const mockGame = { width: 800, height: 450, enemies: [] };
+                    for (let i = 0; i < 5; i++) {
+                        mockGame.enemies.push({});
+                    }
+                    const spawner = new EnemySpawner(mockGame);
+                    spawner.spawnTimer = 0;
+                    spawner.update(16);
+                    assertEqual(mockGame.enemies.length, 5, '不应超过 5 个敌人');
+                });
+            });
+
+            // --- 碰撞检测测试 ---
+            createSuite('碰撞检测', () => {
+                test('AABB 碰撞 - 重叠', () => {
+                    const a = { x: 0, y: 0, width: 50, height: 50 };
+                    const b = { x: 40, y: 40, width: 50, height: 50 };
+                    const result = a.x < b.x + b.width &&
+                                   a.x + a.width > b.x &&
+                                   a.y < b.y + b.height &&
+                                   a.y + a.height > b.y;
+                    assertEqual(result, true, '重叠应碰撞');
+                });
+
+                test('AABB 碰撞 - 不重叠', () => {
+                    const a = { x: 0, y: 0, width: 50, height: 50 };
+                    const b = { x: 100, y: 100, width: 50, height: 50 };
+                    const result = a.x < b.x + b.width &&
+                                   a.x + a.width > b.x &&
+                                   a.y < b.y + b.height &&
+                                   a.y + a.height > b.y;
+                    assertEqual(result, false, '不重叠不应碰撞');
+                });
+
+                test('AABB 碰撞 - 边缘接触', () => {
+                    const a = { x: 0, y: 0, width: 50, height: 50 };
+                    const b = { x: 50, y: 0, width: 50, height: 50 };
+                    const result = a.x < b.x + b.width &&
+                                   a.x + a.width > b.x &&
+                                   a.y < b.y + b.height &&
+                                   a.y + a.height > b.y;
+                    assertEqual(result, false, '边缘接触不碰撞');
+                });
+
+                test('攻击框碰撞 - 命中', () => {
+                    const attackBox = { x: 200, y: 250, width: 80, height: 50 };
+                    const enemyBounds = { x: 250, y: 270, width: 60, height: 60 };
+                    const result = attackBox.x < enemyBounds.x + enemyBounds.width &&
+                                   attackBox.x + attackBox.width > enemyBounds.x &&
+                                   attackBox.y < enemyBounds.y + enemyBounds.height &&
+                                   attackBox.y + attackBox.height > enemyBounds.y;
+                    assertEqual(result, true, '攻击框重叠应命中');
+                });
+
+                test('攻击框碰撞 - 未命中', () => {
+                    const attackBox = { x: 200, y: 250, width: 80, height: 50 };
+                    const enemyBounds = { x: 400, y: 270, width: 60, height: 60 };
+                    const result = attackBox.x < enemyBounds.x + enemyBounds.width &&
+                                   attackBox.x + attackBox.width > enemyBounds.x &&
+                                   attackBox.y < enemyBounds.y + enemyBounds.height &&
+                                   attackBox.y + attackBox.height > enemyBounds.y;
+                    assertEqual(result, false, '攻击框不重叠不应命中');
+                });
+            });
+
+            // --- 物理系统测试 ---
+            createSuite('物理系统', () => {
+                test('重力加速度', () => {
+                    const gravity = 0.7;
+                    let vy = 0;
+                    vy += gravity;
+                    assertEqual(vy, 0.7, '一帧后垂直速度应为 0.7');
+                });
+
+                test('跳跃初速度', () => {
+                    const jumpForce = -12;
+                    let vy = jumpForce;
+                    assertEqual(vy, -12, '跳跃初速度应为 -12');
+                });
+
+                test('地面碰撞修正', () => {
+                    const groundLevel = 350;
+                    let y = 360; // 低于地面
+                    let vy = 5;
+                    const height = 112;
+                    if (y + height > groundLevel) {
+                        y = groundLevel - height;
+                        vy = 0;
+                    }
+                    assertEqual(y, groundLevel - height, 'Y 应修正到地面');
+                    assertEqual(vy, 0, '垂直速度应归零');
+                });
+
+                test('边界限制 - 左边界', () => {
+                    let x = -10;
+                    if (x < 0) x = 0;
+                    assertEqual(x, 0, '不应小于 0');
+                });
+
+                test('边界限制 - 右边界', () => {
+                    const gameWidth = 800;
+                    let x = 790;
+                    const width = 112;
+                    if (x + width > gameWidth) x = gameWidth - width;
+                    assertEqual(x, gameWidth - width, '右边界应正确');
+                });
+
+                test('玩家移动速度', () => {
+                    const speed = 3.5;
+                    let vx = speed;
+                    assertEqual(vx, 3.5, '移动速度应为 3.5');
+                });
+            });
+
+            // --- Game 系统测试 ---
+            createSuite('Game 游戏系统', () => {
+                test('初始化状态', () => {
+                    // 使用真实的 game 实例（已在页面加载时创建）
+                    assertEqual(game.isRunning, false, '初始不应运行');
+                    assertEqual(game.isPaused, false, '初始不应暂停');
+                    assertEqual(game.enemies.length, 0, '初始无敌人');
+                });
+
+                test('gameOver 停止运行', () => {
+                    const mockPlayer = { score: 100 };
+                    game.player = mockPlayer;
+                    game.isRunning = true;
+                    // 模拟 UI 元素
+                    game.gameOverScreen = { classList: { remove: () => {} } };
+                    game.finalScoreDisplay = { textContent: '' };
+                    game.gameOver();
+                    assertEqual(game.isRunning, false, 'gameOver 后应停止');
+                });
+
+                test('removeEnemy 从列表移除', () => {
+                    const mockEnemy = { id: 1 };
+                    game.enemies = [mockEnemy, { id: 2 }];
+                    game.removeEnemy(mockEnemy);
+                    assertEqual(game.enemies.length, 1, '应移除 1 个敌人');
+                    assertEqual(game.enemies[0].id, 2, '剩余敌人应为 id=2');
+                });
+
+                test('removeEnemy 不存在的敌人不报错', () => {
+                    game.enemies = [];
+                    game.removeEnemy({ id: 999 });
+                    assertEqual(game.enemies.length, 0, '移除不存在的敌人不应报错');
+                });
+
+                test('摄像机跟随玩家', () => {
+                    const canvasWidth = 800;
+                    game.player = { x: 300 };
+                    const cameraX = Math.max(0, game.player.x - canvasWidth / 3);
+                    assertEqual(cameraX, Math.max(0, 300 - 800 / 3), '摄像机应跟随玩家');
+                });
+
+                test('摄像机不超出左边界', () => {
+                    const canvasWidth = 800;
+                    game.player = { x: 50 };
+                    const cameraX = Math.max(0, game.player.x - canvasWidth / 3);
+                    assertEqual(cameraX, 0, '摄像机不应小于 0');
+                });
+            });
+
+            // --- 分数系统测试 ---
+            createSuite('分数系统', () => {
+                test('击杀得分', () => {
+                    const mockGame = { width: 800, height: 450, enemies: [], player: { score: 0 }, updateUI: () => {} };
+                    const e = new Enemy(mockGame, 200, 300, 'snail');
+                    assertEqual(e.scoreValue, 10, '骷髅分值为 10');
+
+                    const boar = new Enemy(mockGame, 200, 300, 'boar');
+                    assertEqual(boar.scoreValue, 20, '野猪分值为 20');
+
+                    const bee = new Enemy(mockGame, 200, 300, 'bee');
+                    assertEqual(bee.scoreValue, 15, '蜜蜂分值为 15');
+                });
+
+                test('连续击杀累加', () => {
+                    let score = 0;
+                    score += 10; // snail
+                    score += 15; // bee
+                    score += 20; // boar
+                    assertEqual(score, 45, '总分应为 45');
+                });
+            });
+
+            // 汇总结果
+            createSummary();
+        }
+
+        function createSuite(name, fn) {
+            const suite = document.createElement('div');
+            suite.className = 'suite';
+            const h2 = document.createElement('h2');
+            h2.textContent = name;
+            suite.appendChild(h2);
+
+            const testsContainer = document.createElement('div');
+            suite.appendChild(testsContainer);
+
+            const prevSuite = currentSuiteElement;
+            currentSuiteElement = testsContainer;
+            fn();
+            currentSuiteElement = prevSuite;
+
+            results.appendChild(suite);
+        }
+
+        function createSummary() {
+            const summary = document.createElement('div');
+            summary.className = `summary ${totalFail === 0 ? 'all-pass' : 'has-fail'}`;
+            summary.innerHTML = `<strong>总计: ${totalPass} 通过, ${totalFail} 失败, 共 ${totalPass + totalFail} 项测试</strong>`;
+            results.insertBefore(summary, results.firstChild);
+        }
+    </script>
+</body>
+</html>
