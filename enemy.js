@@ -19,8 +19,8 @@ class Enemy {
     setupType() {
         switch (this.type) {
             case 'snail':
-                this.width = 32 * this.scale;
-                this.height = 24 * this.scale;
+                this.width = 48 * this.scale;
+                this.height = 32 * this.scale;
                 this.speed = 1;
                 this.health = 1;
                 this.scoreValue = 10;
@@ -52,9 +52,9 @@ class Enemy {
         const mobPath = 'Legacy-Fantasy - High Forest 2.3/Mob';
 
         if (this.type === 'snail') {
-            await animator.loadAnimation('snail_walk', `${mobPath}/Snail/walk-Sheet.png`, 8, 32, 24);
-            await animator.loadAnimation('snail_dead', `${mobPath}/Snail/Dead-Sheet.png`, 6, 32, 24);
-            await animator.loadAnimation('snail_hide', `${mobPath}/Snail/Hide-Sheet.png`, 3, 32, 24);
+            await animator.loadAnimation('snail_walk', `${mobPath}/Snail/walk-Sheet.png`, 8, 48, 32);
+            await animator.loadAnimation('snail_dead', `${mobPath}/Snail/Dead-Sheet.png`, 8, 48, 32);
+            await animator.loadAnimation('snail_hide', `${mobPath}/Snail/Hide-Sheet.png`, 8, 48, 32);
         } else if (this.type === 'boar') {
             await animator.loadAnimation('boar_idle', `${mobPath}/Boar/Idle/Idle-Sheet.png`, 4, 40, 28, 0, 4);
             await animator.loadAnimation('boar_run', `${mobPath}/Boar/Run/Run-Sheet.png`, 6, 40, 28, 0, 4);
