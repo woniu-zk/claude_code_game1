@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>森林猎人 - Forest Hunter</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            background: #1a1a2e;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            font-family: 'Courier New', monospace;
+            overflow: hidden;
+        }
+
+        #game-container {
+            position: relative;
+            border: 4px solid #4a4a6a;
+            border-radius: 8px;
+            box-shadow: 0 0 20px rgba(0, 0, 0, 0.5);
+        }
+
+        #gameCanvas {
+            display: block;
+            background: #87CEEB;
+            image-rendering: pixelated;
+            image-rendering: crisp-edges;
+        }
+
+        #ui-overlay {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            color: white;
+            font-size: 18px;
+            text-shadow: 2px 2px 0 #000;
+            pointer-events: none;
+        }
+
+        #start-screen, #game-over-screen {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            background: rgba(0, 0, 0, 0.7);
+            color: white;
+            z-index: 10;
+        }
+
+        #start-screen h1, #game-over-screen h1 {
+            font-size: 36px;
+            margin-bottom: 20px;
+            text-shadow: 3px 3px 0 #4a4a6a;
+        }
+
+        #start-screen p, #game-over-screen p {
+            font-size: 16px;
+            margin-bottom: 10px;
+            text-align: center;
+            line-height: 1.6;
+        }
+
+        .controls {
+            background: rgba(255, 255, 255, 0.1);
+            padding: 15px 25px;
+            border-radius: 8px;
+            margin: 20px 0;
+            text-align: left;
+        }
+
+        .controls kbd {
+            background: #4a4a6a;
+            padding: 3px 8px;
+            border-radius: 4px;
+            border: 1px solid #6a6a8a;
+        }
+
+        button {
+            background: #4CAF50;
+            color: white;
+            border: none;
+            padding: 15px 40px;
+            font-size: 20px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-family: 'Courier New', monospace;
+            text-shadow: 1px 1px 0 #000;
+            box-shadow: 0 4px 0 #2E7D32;
+            transition: transform 0.1s;
+        }
+
+        button:hover {
+            transform: translateY(-2px);
+        }
+
+        button:active {
+            transform: translateY(2px);
+            box-shadow: 0 2px 0 #2E7D32;
+        }
+
+        .hidden {
+            display: none !important;
+        }
+
+        #final-score {
+            font-size: 28px;
+            color: #FFD700;
+            margin: 20px 0;
+        }
+    </style>
+</head>
+<body>
+    <div id="game-container">
+        <canvas id="gameCanvas" width="800" height="450"></canvas>
+
+        <div id="ui-overlay">
+            <div id="health-display">❤️❤️❤️</div>
+            <div id="score-display">得分：0</div>
+        </div>
+
+        <div id="start-screen">
+            <h1>🛡️ 重装战士 🗡️</h1>
+            <p>身穿重甲，手持巨剑，扫清森林中的所有怪物！</p>
+
+            <div class="controls">
+                <p><kbd>A</kbd> <kbd>D</kbd> 或 <kbd>←</kbd> <kbd>→</kbd> - 移动</p>
+                <p><kbd>W</kbd> <kbd>↑</kbd> 或 <kbd>空格</kbd> - 跳跃</p>
+                <p><kbd>J</kbd> 或 <kbd>K</kbd> - 重击</p>
+            </div>
+
+            <div class="controls">
+                <p>❤️ 生命值：5 格（重装战士）</p>
+                <p>⚔️ 攻击力：2 点（一击必杀）</p>
+                <p>🛡️ 防御：受击后 1.5 秒无敌</p>
+            </div>
+
+            <button id="start-btn">开始游戏</button>
+        </div>
+
+        <div id="game-over-screen" class="hidden">
+            <h1>游戏结束</h1>
+            <div id="final-score">得分：0</div>
+            <p>点击按钮重新开始</p>
+            <button id="restart-btn">再玩一次</button>
+        </div>
+    </div>
+
+    <script src="animator.js"></script>
+    <script src="input.js"></script>
+    <script src="player.js"></script>
+    <script src="enemy.js"></script>
+    <script src="game.js"></script>
+</body>
+</html>
